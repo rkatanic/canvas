@@ -11,6 +11,44 @@ const Canvas = (): JSX.Element => {
   const [erase, setErase] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const cursorRef = useRef<HTMLDivElement>(null);
+  const [undoStack, setUndoStack] = useState<any[]>([]);
+
+  const handleSave = async () => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const imgData = await html2canvas(canvas).then((canvas) => {
+      return canvas.toDataURL("image/png");
+    });
+    saveAs(imgData, "sketch.png");
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === "z") {
+        const undoData = undoStack.pop();
+        if (undoData) {
+          const ctx = canvasRef?.current?.getContext("2d");
+          ctx?.putImageData(undoData, 0, 0);
+        }
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [undoStack]);
+
+  useEffect(() => {
+    const handleSaveShortcut = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.code === "KeyS") {
+        handleSave();
+      }
+    };
+    document.addEventListener("keydown", handleSaveShortcut);
+    return () => {
+      document.removeEventListener("keydown", handleSaveShortcut);
+    };
+  }, [handleSave]);
 
   useEffect(() => {
     if (cursorRef && cursorRef.current) {
@@ -32,6 +70,15 @@ const Canvas = (): JSX.Element => {
     const ctx = e.currentTarget.getContext("2d") as any;
     ctx.beginPath();
     ctx.moveTo(e.clientX, e.clientY);
+    setUndoStack((prevStack) => [
+      ...prevStack,
+      ctx.getImageData(
+        0,
+        0,
+        canvasRef?.current?.width,
+        canvasRef?.current?.height
+      ),
+    ]);
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -47,6 +94,7 @@ const Canvas = (): JSX.Element => {
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setMouseDown(false);
     const ctx = e.currentTarget.getContext("2d") as any;
+
     ctx.beginPath();
   };
 
@@ -56,6 +104,10 @@ const Canvas = (): JSX.Element => {
     ctx.lineCap = "round";
     ctx.lineWidth = brushSize;
     ctx.strokeStyle = color;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.shadowBlur = brushSize / 2;
+    ctx.shadowColor = color;
     if (!erase) {
       ctx.lineTo(e.clientX, e.clientY);
       ctx.stroke();
@@ -67,15 +119,6 @@ const Canvas = (): JSX.Element => {
         brushSize
       );
     }
-  };
-
-  const handleSave = async () => {
-    if (!canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const imgData = await html2canvas(canvas).then((canvas) => {
-      return canvas.toDataURL("image/png");
-    });
-    saveAs(imgData, "sketch.png");
   };
 
   const handleClearCanvas = () => {
